@@ -1,0 +1,12 @@
+{
+  "name": "scaloop-desktop",
+  "version": "1.0.0",
+  "description": "Scaloop AI Engine Desktop Wrapper",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^29.0.0"
+  }
+}
