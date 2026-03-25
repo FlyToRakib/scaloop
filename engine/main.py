@@ -18,6 +18,18 @@ try:
 except ImportError:
     cv2 = None
 
+try:
+    from realesrgan import RealESRGANer
+    from basicsr.archs.rrdbnet_arch import RRDBNet
+except ImportError:
+    RealESRGANer = None
+    RRDBNet = None
+
+try:
+    from diffusers import StableDiffusionUpscalePipeline
+except ImportError:
+    StableDiffusionUpscalePipeline = None
+
 from hardware_profiler import profile_hardware, HardwareProfile
 
 # Globals
@@ -60,33 +72,87 @@ class UpscaleWorker:
     def _load_model(self):
         print(f"Instantiating {self.model_name}...")
         if self.model_name == "ESRGAN":
-            # Stub integration ready for RealESRGAN
-            print("ESRGAN structure compiled (Awaiting 'realesrgan' import/weights).")
+            if RealESRGANer is None or RRDBNet is None:
+                print("Error: realesrgan / basicsr is not installed.")
+                return
+            print("Loading ESRGAN...")
+            try:
+                # RealESRGAN_x4plus requires 64 channels, 23 blocks
+                model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+                self.model = RealESRGANer(
+                    scale=4,
+                    model_path='https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth',
+                    model=model,
+                    tile=0,
+                    tile_pad=10,
+                    pre_pad=0,
+                    half=(torch.cuda.is_available() if torch else False)
+                )
+                print("ESRGAN loaded.")
+            except Exception as e:
+                print(f"Failed to load ESRGAN: {e}")
+
         elif self.model_name == "Diffusion":
-            print("Stable Diffusion pipeline logic prepped (Awaiting 'diffusers').")
+            if StableDiffusionUpscalePipeline is None:
+                print("Error: diffusers is not installed.")
+                return
+            print("Loading Stable Diffusion Upscaler...")
+            try:
+                model_id = "stabilityai/stable-diffusion-x4-upscaler"
+                dtype = torch.float16 if torch and torch.cuda.is_available() else torch.float32
+                self.model = StableDiffusionUpscalePipeline.from_pretrained(model_id, torch_dtype=dtype)
+                if torch and torch.cuda.is_available():
+                    self.model = self.model.to("cuda")
+                    self.model.enable_attention_slicing()
+                print("Stable Diffusion loaded.")
+            except Exception as e:
+                print(f"Failed to load Diffusion: {e}")
             
     async def process_image(self, input_path: str, output_path: str):
         print(f"Loading image {input_path}...")
-        if cv2 is None:
-            print("Error: CV2 not installed (`pip install opencv-python`), skipping file I/O.")
-            return
-
-        # 1. Load source image tensor
-        img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
-        if img is None:
-            print(f"Error: Could not read {input_path}")
-            return
-
-        print(f"Processing {input_path} at {self.scale_factor}x scale using {self.model_name}...")
         
-        # 2. Engine Pass (Simulating upscale explicitly until PyTorch weight arrays are provided)
-        # Using native CV2 Lanczos processing to complete the true file I/O circuit.
-        # In a real pipeline: `output, _ = self.model.enhance(img, outscale=self.scale_factor)`
-        output = cv2.resize(img, None, fx=self.scale_factor, fy=self.scale_factor, interpolation=cv2.INTER_LANCZOS4)
-        
-        # 3. Explicitly write back to the user's filesystem
-        cv2.imwrite(output_path, output)
-        print(f"Successfully saved Up-Scaled output to: {output_path}")
+        if self.model_name == "Diffusion":
+            if self.model is None:
+                print("Diffusion model not loaded.")
+                return
+            import PIL.Image
+            try:
+                img = PIL.Image.open(input_path).convert("RGB")
+                prompt = "high resolution, highly detailed"
+                loop = asyncio.get_running_loop()
+                def run_sd():
+                    return self.model(prompt=prompt, image=img).images[0]
+                output_image = await loop.run_in_executor(None, run_sd)
+                output_image.save(output_path)
+                print(f"Successfully saved Up-Scaled output to: {output_path}")
+            except Exception as e:
+                print(f"Diffusion processing failed: {e}")
+                
+        elif self.model_name == "ESRGAN":
+            if cv2 is None:
+                print("Error: CV2 not installed.")
+                return
+            img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
+            if img is None:
+                print(f"Error: Could not read {input_path}")
+                return
+                
+            if self.model:
+                loop = asyncio.get_running_loop()
+                def run_esrgan():
+                    output, _ = self.model.enhance(img, outscale=self.scale_factor)
+                    return output
+                try:
+                    output = await loop.run_in_executor(None, run_esrgan)
+                    cv2.imwrite(output_path, output)
+                    print(f"Successfully saved Up-Scaled output to: {output_path}")
+                except Exception as e:
+                    print(f"ESRGAN processing failed: {e}")
+            else:
+                # Stub fallback
+                output = cv2.resize(img, None, fx=self.scale_factor, fy=self.scale_factor, interpolation=cv2.INTER_LANCZOS4)
+                cv2.imwrite(output_path, output)
+                print(f"Successfully saved Up-Scaled output to: {output_path} (Fallback)")
 
 
 class SingleRequest(BaseModel):

@@ -3,3 +3,8 @@ uvicorn[standard]
 psutil
 python-multipart
 torch
+opencv-python
+realesrgan
+diffusers
+transformers
+accelerate
