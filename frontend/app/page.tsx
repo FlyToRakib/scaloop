@@ -8,6 +8,7 @@ export default function ScaloopPage() {
   const [gpuLimit, setGpuLimit] = useState<number>(80);
   const [sourceDir, setSourceDir] = useState<string>('');
   const [outputDir, setOutputDir] = useState<string>('');
+  const [outputFormat, setOutputFormat] = useState<string>('png');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, percentage: 0 });
   const [sysStatus, setSysStatus] = useState<any>(null);
@@ -32,10 +33,11 @@ export default function ScaloopPage() {
     const fetchStatus = async () => {
       try {
         const res = await fetch('http://127.0.0.1:8000/api/system-status');
+        if (!res.ok) throw new Error("not ok");
         const data = await res.json();
         setSysStatus(data);
       } catch (err) {
-        console.error("Engine offline", err);
+        setSysStatus(null);
       }
     };
     fetchStatus();
@@ -59,7 +61,8 @@ export default function ScaloopPage() {
           output_dir: outputDir, 
           model,
           gpu_limit: gpuLimit,
-          scale_factor: scaleFactor
+          scale_factor: scaleFactor,
+          output_format: outputFormat
         }),
       });
     } catch (error) {
@@ -246,7 +249,7 @@ export default function ScaloopPage() {
             {/* Execution Stats Container */}
             <section className="bg-neutral-900/60 p-6 rounded-2xl border border-neutral-800 relative shadow-2xl overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-t from-indigo-900/10 to-transparent pointer-events-none" />
-                {progress.total > 0 && (
+                {isProcessing && (
                     <div className="mb-6 space-y-3 relative z-10">
                         <div className="flex justify-between text-sm font-medium">
                             <span className="text-indigo-400 animate-pulse flex items-center gap-2">
@@ -254,13 +257,13 @@ export default function ScaloopPage() {
                                 Running Batch Queue
                             </span>
                             <span className="text-white bg-neutral-800 px-2 py-1 rounded border border-neutral-700 font-mono">
-                                {progress.current} / {progress.total}
+                                {progress.current} / {progress.total || '?'}
                             </span>
                         </div>
                         <div className="h-3 bg-neutral-900/50 border border-neutral-800 rounded-full overflow-hidden relative shadow-inner">
                             <div 
                                 className="absolute top-0 left-0 h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-500 ease-out"
-                                style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                                style={{ width: `${progress.total > 0 ? ((progress.current + progress.percentage/100.0) / progress.total) * 100 : 0}%` }}
                             />
                         </div>
                         <p className="text-xs text-neutral-500 text-right font-mono text-purple-400/80">Sub-File Parse: {progress.percentage.toFixed(1)}%</p>
@@ -289,7 +292,10 @@ export default function ScaloopPage() {
                 <div className="p-6 space-y-6">
                     <div>
                         <label className="text-sm font-medium text-neutral-300">Default Output Format</label>
-                        <select className="w-full mt-2 bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white transition">
+                        <select 
+                            value={outputFormat}
+                            onChange={(e) => setOutputFormat(e.target.value)}
+                            className="w-full mt-2 bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white transition">
                             <option value="png">PNG (Lossless & High Quality)</option>
                             <option value="jpg">JPG (Smaller Space)</option>
                             <option value="webp">WEBP (Modern Compression)</option>

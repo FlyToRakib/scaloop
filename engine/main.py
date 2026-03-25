@@ -35,6 +35,7 @@ from hardware_profiler import profile_hardware, HardwareProfile
 # Globals
 hardware_profile: HardwareProfile = None
 progress_connections: list[WebSocket] = []
+_gpu_limit_applied: bool = False
 
 
 def select_directory_dialog() -> str:
@@ -62,10 +63,12 @@ class UpscaleWorker:
         Dynamically adjusts PyTorch's max VRAM allocation footprint per process.
         Requires the memory fraction (0.0 to 1.0) slider value from the frontend.
         """
-        if torch and torch.cuda.is_available() and self.gpu_limit > 0.0:
+        global _gpu_limit_applied
+        if torch and torch.cuda.is_available() and self.gpu_limit > 0.0 and not _gpu_limit_applied:
             try:
                 torch.cuda.set_per_process_memory_fraction(self.gpu_limit)
                 print(f"GPU Memory Fraction Limited To: {self.gpu_limit * 100}%")
+                _gpu_limit_applied = True
             except Exception as e:
                 print(f"Warning: Could not set memory fraction: {e}")
 
@@ -97,6 +100,7 @@ class UpscaleWorker:
                 print("Error: diffusers is not installed.")
                 return
             print("Loading Stable Diffusion Upscaler...")
+            print("Notice: Model weights will download to Hugging Face Cache (~/.cache/huggingface/hub/) if not found locally.")
             try:
                 model_id = "stabilityai/stable-diffusion-x4-upscaler"
                 dtype = torch.float16 if torch and torch.cuda.is_available() else torch.float32
@@ -161,6 +165,7 @@ class SingleRequest(BaseModel):
     model: str
     gpu_limit: float
     scale_factor: int
+    output_format: str = ""
 
 class BatchRequest(BaseModel):
     directory_path: str
@@ -168,6 +173,7 @@ class BatchRequest(BaseModel):
     model: str
     gpu_limit: float
     scale_factor: int
+    output_format: str = ""
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -233,7 +239,8 @@ async def upscale_single(req: SingleRequest):
     # Construct output cleanly (e.g. name_4x_esrgan.png)
     base = os.path.basename(req.image_path)
     name, ext = os.path.splitext(base)
-    clean_name = f"{name}_{req.scale_factor}x_{req.model.lower()}{ext}"
+    out_ext = f".{req.output_format.lower()}" if req.output_format else ext
+    clean_name = f"{name}_{req.scale_factor}x_{req.model.lower()}{out_ext}"
     safe_out = os.path.join(req.output_dir, clean_name)
     
     await worker.process_image(req.image_path, safe_out)
@@ -265,7 +272,8 @@ async def upscale_batch(req: BatchRequest):
         # Format the processed file name to include scale factors
         base = os.path.basename(f)
         name, ext = os.path.splitext(base)
-        clean_name = f"{name}_{req.scale_factor}x_{req.model.lower()}{ext}"
+        out_ext = f".{req.output_format.lower()}" if req.output_format else ext
+        clean_name = f"{name}_{req.scale_factor}x_{req.model.lower()}{out_ext}"
         safe_out = os.path.join(req.output_dir, clean_name)
         
         await worker.process_image(f, safe_out)

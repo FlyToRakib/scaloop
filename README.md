@@ -61,6 +61,9 @@ npm install
 
 ## 🏃 Running the Application
 
+> [!NOTE]
+> **First Run Model Downloads**: The first time you select and run either RealESRGAN or Stable Diffusion, the AI Engine will download the pre-trained weights automatically (up to ~3.5GB). Please ensure you have an active internet connection and wait for the engine terminal to finish downloading.
+
 To run Scaloop locally, you will need to start all three components in separate terminal windows:
 
 **1. Start the AI Engine (Terminal 1)**
