@@ -36,6 +36,12 @@ venv\Scripts\activate
 # On Mac/Linux:
 # source venv/bin/activate
 
+# Install PyTorch for NVIDIA GPU (Recommended for faster AI inference):
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+# OR for CPU only:
+# pip install torch torchvision torchaudio
+
+# Install remaining backend requirements:
 pip install -r requirements.txt
 ```
 
@@ -44,7 +50,6 @@ Navigate to the `frontend` directory and install the Node runtime packages:
 ```bash
 cd ../frontend
 npm install
-# To run the development server later: npm run dev
 ```
 
 ### 4. Setup the Desktop Client (Electron)
@@ -52,7 +57,29 @@ Navigate to the `desktop` directory to install the wrapper bounds:
 ```bash
 cd ../desktop
 npm install
-# To start the desktop app: npm start
+```
+
+## 🏃 Running the Application
+
+To run Scaloop locally, you will need to start all three components in separate terminal windows:
+
+**1. Start the AI Engine (Terminal 1)**
+```bash
+cd engine
+# Ensure your virtual environment is activated (e.g., venv\Scripts\activate)
+python main.py
+```
+
+**2. Start the Frontend UI (Terminal 2)**
+```bash
+cd frontend
+npm run dev
+```
+
+**3. Start the Desktop Wrapper (Terminal 3)**
+```bash
+cd desktop
+npm start
 ```
 
 ## 🤝 Contributing
